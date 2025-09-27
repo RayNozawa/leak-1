@@ -1,3 +1,5 @@
+JANGAN DI FORK, DOWNLOAD AJA JING, KLAU LU FORK GA PRIVATE 💤
+
 report — setuju gk upload full directory?😹
 
 ## indrog? iputu indrawan
