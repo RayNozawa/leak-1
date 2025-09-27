@@ -12,7 +12,7 @@ report — setuju gk upload full directory?😹
 Lampung, Indonesia  
 akhir kelas 12 (sma/smk) 18 tahun / 2007  
 ultah? _ 16 januari
-
++6289630567696 +6289630567696 +6285194769068 +6285658939117
 pada tanggal 10 sep 2025 at 20:59
 
 sudah aktif dari 2024 lalu yang lewat  
