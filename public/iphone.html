@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CORS Checker – Minimal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gray-50 text-gray-800">
+  <div class="max-w-3xl mx-auto p-6">
+    <header class="mb-6">
+      <h1 class="text-2xl font-semibold">CORS Checker</h1>
+      <p class="text-sm text-gray-500">Tes cepat request lintas origin. Jalankan halaman ini via http/https (bukan file:/// atau content://).</p>
+    </header>
+
+    <section class="space-y-4">
+      <div class="bg-white rounded-2xl shadow p-4 space-y-3">
+        <label class="block text-sm font-medium">URL</label>
+        <input id="url" type="url" placeholder="https://api.example.com/path"
+               class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500"/>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-sm font-medium">Method</label>
+            <select id="method"
+                    class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500">
+              <option>GET</option>
+              <option>POST</option>
+              <option>PUT</option>
+              <option>DELETE</option>
+              <option>PATCH</option>
+            </select>
+          </div>
+
+          <div class="md:col-span-2 flex items-center gap-4">
+            <label class="inline-flex items-center gap-2 text-sm">
+              <input id="usePreflight" type="checkbox" class="rounded border-gray-300">
+              Jalankan preflight (OPTIONS) dulu
+            </label>
+            <label class="inline-flex items-center gap-2 text-sm">
+              <input id="withCredentials" type="checkbox" class="rounded border-gray-300">
+              Kirim kredensial (cookies)
+            </label>
+          </div>
+        </div>
+
+        <details class="rounded-xl border border-dashed border-gray-200 p-3">
+          <summary class="cursor-pointer text-sm font-medium">Header Tambahan (opsional) — format <code>Key: Value</code> per baris</summary>
+          <textarea id="headers" rows="4" placeholder="Authorization: Bearer xxx&#10;X-Custom: 123"
+                    class="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+        </details>
+
+        <details class="rounded-xl border border-dashed border-gray-200 p-3">
+          <summary class="cursor-pointer text-sm font-medium">Body (opsional, JSON/string)</summary>
+          <textarea id="body" rows="5" placeholder='{"sample":true}'
+                    class="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+        </details>
+
+        <div class="flex gap-3 pt-2">
+          <button id="run" class="rounded-2xl px-4 py-2 bg-indigo-600 text-white shadow hover:bg-indigo-700">Tes</button>
+          <button id="clear" class="rounded-2xl px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200">Bersihkan</button>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow p-4 space-y-3">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Hasil</h2>
+
+        <div id="meta" class="text-sm text-gray-700 space-y-1"></div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <h3 class="text-sm font-medium mb-1">Response Headers</h3>
+            <pre id="respHeaders" class="bg-gray-900 text-gray-100 rounded-xl p-3 text-xs overflow-auto min-h-[120px]"></pre>
+          </div>
+          <div>
+            <h3 class="text-sm font-medium mb-1">Body</h3>
+            <pre id="respBody" class="bg-gray-900 text-gray-100 rounded-xl p-3 text-xs overflow-auto min-h-[120px]"></pre>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-sm font-medium mb-1">cURL (ekuivalen)</h3>
+          <pre id="curl" class="bg-gray-900 text-gray-100 rounded-xl p-3 text-xs overflow-auto"></pre>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function parseHeaders(text) {
+      const headers = {};
+      text.split(/\r?\n/).forEach(line => {
+        const idx = line.indexOf(':');
+        if (idx > -1) {
+          const k = line.slice(0, idx).trim();
+          const v = line.slice(idx + 1).trim();
+          if (k) headers[k] = v;
+        }
+      });
+      return headers;
+    }
+
+    function buildCurl(url, method, headersObj, body, withCreds) {
+      const parts = ['curl', '-i', '-X', method, JSON.stringify(url)];
+      for (const [k,v] of Object.entries(headersObj)) {
+        parts.push('-H', JSON.stringify(`${k}: ${v}`));
+      }
+      if (withCreds) parts.push('--include'); // represent; cookies depend on environment
+      if (body && method !== 'GET') {
+        parts.push('--data-binary', JSON.stringify(body));
+      }
+      return parts.join(' ');
+    }
+
+    function show(obj) {
+      return typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+    }
+
+    async function doRequest() {
+      const url = $('url').value.trim();
+      const method = $('method').value;
+      const preflight = $('usePreflight').checked;
+      const withCreds = $('withCredentials').checked;
+
+      if (!url) {
+        alert('URL wajib diisi.');
+        return;
+      }
+
+      // headers from textarea
+      const headersObj = parseHeaders($('headers').value);
+      let bodyRaw = $('body').value;
+      let bodyToSend = undefined;
+
+      if (bodyRaw && method !== 'GET') {
+        try {
+          bodyToSend = bodyRaw; // don't force JSON; let server decide
+          // If header missing and looks like JSON, set it
+          if (!Object.keys(headersObj).some(k => k.toLowerCase() === 'content-type')) {
+            try {
+              JSON.parse(bodyRaw);
+              headersObj['Content-Type'] = 'application/json';
+            } catch {}
+          }
+        } catch (e) {}
+      }
+
+      $('respHeaders').textContent = '';
+      $('respBody').textContent = '';
+      $('meta').textContent = 'Memulai request...';
+      const started = performance.now();
+
+      try {
+        if (preflight) {
+          const optReq = await fetch(url, {
+            method: 'OPTIONS',
+            mode: 'cors',
+            credentials: withCreds ? 'include' : 'omit',
+            headers: {
+              'Access-Control-Request-Method': method,
+              'Access-Control-Request-Headers': Object.keys(headersObj).join(', ').toLowerCase() || '',
+              ...headersObj
+            }
+          });
+          const optTime = (performance.now() - started).toFixed(0);
+          const optHeaders = Array.from(optReq.headers.entries())
+            .map(([k,v]) => `${k}: ${v}`).join('\n');
+          $('meta').innerHTML =
+            `<div class="text-sm">Preflight OPTIONS status: <b>${optReq.status}</b> (${optReq.statusText}) – ${optTime} ms</div>`;
+          $('respHeaders').textContent = optHeaders;
+          $('respBody').textContent = '(OPTIONS response biasanya tanpa body)';
+        }
+
+        const reqStarted = performance.now();
+        const res = await fetch(url, {
+          method,
+          mode: 'cors',
+          credentials: withCreds ? 'include' : 'omit',
+          headers: headersObj,
+          body: (method === 'GET') ? undefined : bodyToSend
+        });
+
+        const t = (performance.now() - reqStarted).toFixed(0);
+        const allHeaders = Array.from(res.headers.entries()).map(([k,v]) => `${k}: ${v}`).join('\n');
+        $('respHeaders').textContent = allHeaders;
+
+        const contentType = res.headers.get('content-type') || '';
+        let bodyText = '';
+        if (contentType.includes('application/json')) {
+          try {
+            const data = await res.json();
+            bodyText = JSON.stringify(data, null, 2);
+          } catch {
+            bodyText = await res.text();
+          }
+        } else {
+          bodyText = await res.text();
+        }
+
+        $('respBody').textContent = bodyText;
+        $('meta').innerHTML = `
+          <div class="text-sm">
+            Status: <b>${res.status}</b> (${res.statusText}) •
+            Waktu: ${t} ms •
+            Origin halaman: <code>${location.origin}</code>
+          </div>
+        `;
+
+        $('curl').textContent = buildCurl(url, method, headersObj, bodyToSend, withCreds);
+      } catch (err) {
+        $('meta').innerHTML = `<div class="text-sm text-red-600">Fetch gagal: ${err?.name || 'Error'} — ${err?.message || err}</div>`;
+      }
+    }
+
+    $('run').addEventListener('click', doRequest);
+    $('clear').addEventListener('click', () => {
+      $('respHeaders').textContent = '';
+      $('respBody').textContent = '';
+      $('meta').textContent = '';
+      $('curl').textContent = '';
+    });
+  </script>
+</body>
+</html>
