@@ -1,4 +1,4 @@
-⚠️JANGAN DI FORK, DOWNLOAD AJA JING, KLAU LU FORK GA PRIVATE 💤
+⚠️JANGAN DI FORK, DOWNLOAD AJA JING, KLAU LU FORK GW PRIVATE 💤
 
 report — setuju gk upload full directory?😹
 
